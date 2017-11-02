@@ -1,5 +1,14 @@
 /**
  * @author See Contributors.txt for code contributors and overview of BadgerDB.
+ * 
+ * Name: Chance Hammacher
+ * Student ID: 9070118170
+ *
+ * Name: Connor Hoffmann
+ * Student ID: 9070374252
+ * 
+ * Name: Evan Bertz
+ * Student ID: 9070334721
  *
  * @section LICENSE
  * Copyright (c) 2012 Database Group, Computer Sciences Department, University of Wisconsin-Madison.
@@ -38,8 +47,11 @@ BufMgr::BufMgr(std::uint32_t bufs)
   clockHand = bufs - 1;
 }
 
-
+//
+//Buffer Manager Deconstructor. Flushes Dirty pags and deallocates the buffer pool and description table
+//
 BufMgr::~BufMgr() {
+	//check for any dirty pages that need to be flushed to disk
 	for (unsigned i = 0; i < numBufs; i++) {
 		BufDesc* buf = &bufDescTable[i];
 		if (buf->dirty == 1){
@@ -48,25 +60,31 @@ BufMgr::~BufMgr() {
 	}
 
 	delete[] bufPool;
-	//free(bufPool);
-	//free(bufDescTable);
-	delete[] bufDescTable;	
+	delete[] bufDescTable;
+	delete hashTable;	
 }
 
+
+//Advances clock to the next frame in pool
 void BufMgr::advanceClock()
 {
 	clockHand = (clockHand + 1) % (numBufs);
 }
 
+
+//Allocates a free frame and writes dirty pages back to disk. 
 void BufMgr::allocBuf(FrameId & frame) 
 {
 
 	FrameId start = clockHand;
+	// use this to check if no pages have been pinned
 	bool unpinned_frame_exists = false;			
 	while(1) {
+		// advances clock each iteration of loop.
 		advanceClock();
 		BufDesc* curBuf = &bufDescTable[clockHand];
 
+		// if clock has gone around in a full loop check if pages pinned
 		if (clockHand == start) {
 			if (!unpinned_frame_exists) throw BufferExceededException();
 			else unpinned_frame_exists = false;
@@ -92,23 +110,17 @@ void BufMgr::allocBuf(FrameId & frame)
 			if(curBuf->dirty)
 			{	
 				curBuf->file->writePage(bufPool[clockHand]);
-				//curBuf->dirty = 0;
 			}
 			hashTable->remove(curBuf->file, curBuf->pageNo);
-			//curBuf->Print();
 			curBuf->Clear();	
-
-			//curBuf->Set(bufDescTable[frame].file, bufDescTable[frame].pageNo);
-			//curBuf->Print();
 			return;					
 
 		
 		}
 		else {
+			//if not valid just clear frame and return
 			frame = clockHand;
 			curBuf->Clear();
-			//curBuf->Set(bufDescTable[frame].file, bufDescTable[frame].pageNo);
-			//curBuf->Print();
 			return;
 		}
 
@@ -118,14 +130,20 @@ void BufMgr::allocBuf(FrameId & frame)
 
 }
 
+//Reads a page thats in the buffer or adds to buffer if it needed
+//
+//returns pointer to page if it is in the buffer pool
+
 	
 void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 {
 	FrameId frameNo;
 	try{
+		//looks for page in hashtable, may throw exception
 		hashTable->lookup(file, pageNo, frameNo);
 	}
 	catch(HashNotFoundException) {
+		//if not in hashtable, find frame to add too
 		allocBuf(frameNo);
 		bufPool[frameNo] = file->readPage(pageNo);
 		hashTable->insert(file, pageNo, frameNo);
@@ -134,9 +152,9 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 
 		buf->Set(file, pageNo);
 		page = &bufPool[frameNo];
-		//buf->Print();
 		return;
 	}
+	// if page was in hashtable increase pin count and set refbit
 	BufDesc* buf = &bufDescTable[frameNo];
         buf->refbit = 1;
         buf->pinCnt++;
@@ -144,33 +162,37 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 }
 
 
+//if page is in hashtable, decrement the pincount
 void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty) 
 {
 	FrameId frameNo;
 	try {
+		//looks for page in the hashTable, may throw exception
 		hashTable->lookup(file, pageNo, frameNo);
 	}
 	catch(HashNotFoundException) {
-		std::cout << "HASH NOT FOUND\n";
+		// do nothing if it wasn't found
 		return;
 	}
 
 	BufDesc* buf = &bufDescTable[frameNo];
+	//check dirty bit passed in and set the dirty bit of frame if needed
 	if(dirty == true) {buf->dirty = true;}
+	//if pin count is already 0 throw exception
         if(buf->pinCnt < 1) {
                 throw PageNotPinnedException("filename", pageNo, frameNo);
         }
+	// decrease pin count
         buf->pinCnt--;
 }
 
+
+//Returns a newly allocated page and inserts into hastable and is set accordingly
 void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page) 
 {
 	FrameId frameNo;
 
-
-	//Page newPage = file->allocatePage();
-	//pageNo = newPage.page_number();
-	
+	//finds a frame to be used to alloc a Page
 	allocBuf(frameNo);
 	bufPool[frameNo] = file->allocatePage();
 	pageNo = bufPool[frameNo].page_number();
@@ -183,23 +205,30 @@ void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page)
 		
 }
 
+
+//Writes dirty pages to disk 
+//
 void BufMgr::flushFile(const File* file) 
 {
+	//check each frame to find a file and page
 	for(unsigned int i = 0; i < numBufs ; i++)
 	{
 
-		BufDesc* desc = &bufDescTable[i];  
+		BufDesc* desc = &bufDescTable[i]; 
+		// if there is a file and page 
 		if(desc->file == file)
 		{
 			if(!desc->valid)
 				throw BadBufferException(desc->frameNo, desc->dirty, desc->valid, desc->refbit);
 			if(desc->pinCnt)
 				throw PagePinnedException("filename", desc->pageNo, desc->frameNo);
+			// if its dirty flush the page
 			if(desc->dirty == 1)
 			{
 				desc->file->writePage(bufPool[desc->frameNo]);
 				desc->dirty = 0;
 			}
+			// remove it from hashTable
 			hashTable->remove(desc->file, desc->pageNo);
 			desc->Clear();		
 			
@@ -207,21 +236,19 @@ void BufMgr::flushFile(const File* file)
 	}
 }
 
+
+//deletes a page from the file and frees space accodingly
 void BufMgr::disposePage(File* file, const PageId PageNo)
 {
-	bool inBuf = false;
+	//check if the current page is in the buffer
 	for (unsigned i = 0; i < numBufs; i++) {
 		BufDesc* buf = &bufDescTable[i];
 		if(buf->file == file && buf->pageNo == PageNo){
 			hashTable->remove(buf->file, buf->pageNo);
-			buf->valid = 0;	
 			buf->Clear();
-			inBuf = true;
 		}
 	}
-	if(inBuf){
-		file->deletePage(PageNo);
-	}
+	file->deletePage(PageNo);
 }
 
 void BufMgr::printSelf(void) 
