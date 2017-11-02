@@ -10,6 +10,8 @@
  * Name: Evan Bertz
  * Student ID: 9070334721
  *
+ * This file is used to implement the clock algo for a buffer manager
+ *
  * @section LICENSE
  * Copyright (c) 2012 Database Group, Computer Sciences Department, University of Wisconsin-Madison.
  */
@@ -73,6 +75,7 @@ void BufMgr::advanceClock()
 
 
 //Allocates a free frame and writes dirty pages back to disk. 
+// Return: a pointer to the frame number used.
 void BufMgr::allocBuf(FrameId & frame) 
 {
 
@@ -131,10 +134,8 @@ void BufMgr::allocBuf(FrameId & frame)
 }
 
 //Reads a page thats in the buffer or adds to buffer if it needed
-//
+//Input: file: points to a file to be read, pageNo: the page number in the file
 //returns pointer to page if it is in the buffer pool
-
-	
 void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 {
 	FrameId frameNo;
@@ -163,6 +164,7 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 
 
 //if page is in hashtable, decrement the pincount
+//Input: file: a pointer to a file, pageNo: page number of file to be looked at, dirty: a bool used to set a page unPined to true
 void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty) 
 {
 	FrameId frameNo;
@@ -188,6 +190,7 @@ void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty)
 
 
 //Returns a newly allocated page and inserts into hastable and is set accordingly
+//Input: file: a file to use for allocating
 void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page) 
 {
 	FrameId frameNo;
@@ -207,7 +210,7 @@ void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page)
 
 
 //Writes dirty pages to disk 
-//
+//Input: file: a file to remove from disk
 void BufMgr::flushFile(const File* file) 
 {
 	//check each frame to find a file and page
@@ -238,6 +241,7 @@ void BufMgr::flushFile(const File* file)
 
 
 //deletes a page from the file and frees space accodingly
+//Input: file: a file containing a page, PageNo: the page number in a file to remove from that file input
 void BufMgr::disposePage(File* file, const PageId PageNo)
 {
 	//check if the current page is in the buffer
