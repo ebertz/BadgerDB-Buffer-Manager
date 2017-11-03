@@ -36,6 +36,7 @@ void test3();
 void test4();
 void test5();
 void test6();
+void test7();
 void testBufMgr();
 
 int main() 
@@ -143,10 +144,13 @@ void testBufMgr()
 	//Commenting  a particular test requires commenting all tests that follow it else those tests would fail.
 	test1();
 	test2();
-	//test3();
-	//test4();
-	//test5();
-	//test6();
+	test3();
+	test4();
+	test5();
+	test6();
+	test7();
+
+	delete bufMgr;
 
 	//Close files before deleting them
 	file1.~File();
@@ -161,8 +165,6 @@ void testBufMgr()
 	File::remove(filename3);
 	File::remove(filename4);
 	File::remove(filename5);
-
-	delete bufMgr;
 
 	std::cout << "\n" << "Passed all tests." << "\n";
 }
@@ -202,8 +204,9 @@ void test2()
 
 	for (i = 0; i < num/3; i++) 
 	{
+		//std::cout << "loop number " << i << std::flush;
 		bufMgr->allocPage(file2ptr, pageno2, page2);
-		std::cout << "ALLOC FILE 2\n" << std::flush;		
+		//std::cout << "ALLOC FILE 2\n" << std::flush;		
 		sprintf((char*)tmpbuf, "test.2 Page %u %7.1f", pageno2, (float)pageno2);
 		rid2 = page2->insertRecord(tmpbuf);
 
@@ -211,7 +214,7 @@ void test2()
     		pageno1 = pid[index];
 
 		bufMgr->readPage(file1ptr, pageno1, page);
-		std::cout << "READ FILE 1\n" << std::flush;
+		//std::cout << "READ FILE 1\n" << std::flush;
 		
 		
 		sprintf((char*)tmpbuf, "test.1 Page %u %7.1f", pageno1, (float)pageno1);
@@ -221,12 +224,12 @@ void test2()
 		}
 
 		bufMgr->allocPage(file3ptr, pageno3, page3);
-		std::cout << "ALLOC FILE 3\n" << std::flush;		
+		//std::cout << "ALLOC FILE 3\n" << std::flush;		
 		sprintf((char*)tmpbuf, "test.3 Page %u %7.1f", pageno3, (float)pageno3);
 		rid3 = page3->insertRecord(tmpbuf);
 
 		bufMgr->readPage(file2ptr, pageno2, page2);
-		std::cout << "READ FILE 2\n" << std::flush;		
+		//std::cout << "READ FILE 2\n" << std::flush;		
 		sprintf((char*)&tmpbuf, "test.2 Page %u %7.1f", pageno2, (float)pageno2);
 		if(strncmp(page2->getRecord(rid2).c_str(), tmpbuf, strlen(tmpbuf)) != 0)
 		{
@@ -234,7 +237,7 @@ void test2()
 		}
 	
 		bufMgr->readPage(file3ptr, pageno3, page3);
-		std::cout << "READ FILE 3\n" << std::flush;		
+		//td::cout << "READ FILE 3\n" << std::flush;		
 		sprintf((char*)&tmpbuf, "test.3 Page %u %7.1f", pageno3, (float)pageno3);
 		if(strncmp(page3->getRecord(rid3).c_str(), tmpbuf, strlen(tmpbuf)) != 0)
 		{
@@ -242,7 +245,7 @@ void test2()
 		}
 
 		bufMgr->unPinPage(file1ptr, pageno1, false);
-		std::cout << "UNPIN FILE 1\n" << std::flush;		
+		//std::cout << "UNPIN FILE 1\n" << std::flush;		
 	}
 
 	for (i = 0; i < num/3; i++) {
@@ -331,4 +334,32 @@ void test6()
 		bufMgr->unPinPage(file1ptr, i, true);
 
 	bufMgr->flushFile(file1ptr);
+}
+
+void test7()
+{
+	//flushing file with pages still pinned. Should generate an error
+        for (i = 1; i <= num; i++) {
+                bufMgr->readPage(file1ptr, i, page);
+        }
+
+        try
+        {
+                bufMgr->disposePage(file1ptr, 3);
+		bufMgr->readPage(file1ptr, 3, page);
+                //PRINT_ERROR("ERROR :: Pages pinned for file being flushed. Exception should have been thrown before execution reaches this point.");
+        }
+        catch(PagePinnedException e)
+        {
+        }
+	catch(InvalidPageException e)
+	{
+	}
+
+        std::cout << "Test 7 passed" << "\n";
+
+        for (i = 1; i <= num; i++)
+                bufMgr->unPinPage(file1ptr, i, true);
+
+        bufMgr->flushFile(file1ptr);
 }
